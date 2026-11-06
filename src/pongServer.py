@@ -1,7 +1,7 @@
 # =================================================================================================
-# Contributing Authors:	    <Anyone who touched the code>
-# Email Addresses:          <Your uky.edu email addresses>
-# Date:                     <The date the file was last edited>
+# Contributing Authors:	    Lucas Anderson
+# Email Addresses:          lfan224@uky.edu
+# Date:                     11-4-26
 # Purpose:                  <How this file contributes to the project>
 # Misc:                     <Not Required.  Anything else you might want to include>
 # =================================================================================================
@@ -15,3 +15,11 @@ import threading
 # for each player and where the ball is, and relay that to each client
 # I suggest you use the sync variable in pongClient.py to determine how out of sync your two
 # clients are and take actions to resync the games
+
+#create the server socket, then bind and listen
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind(("127.0.0.1", 19999))
+server.listen(5)
+
+
+
