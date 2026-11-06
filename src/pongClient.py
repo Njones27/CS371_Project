@@ -176,9 +176,17 @@ def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
     # Create a socket and connect to the server
     # You don't have to use SOCK_STREAM, use what you think is best
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # convert port to usable int
+    try:
+        client.connect((ip,int(port)))
+    except (OSError, ValueError) as e:
+      errorLabel.config(text=f"Could not connect: {e}")
+      errorLabel.update()
+      return
 
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
-
+    #receive message function -- send message function must be implemented server side to send message,
+    # client side will also need a send message function to send information to the server
 
     # If you have messages you'd like to show the user use the errorLabel widget like so
     errorLabel.config(text=f"Some update text. You input: IP: {ip}, Port: {port}")
