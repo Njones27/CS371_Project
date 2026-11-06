@@ -18,7 +18,7 @@ import threading
 
 #create the server socket, then bind and listen
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(("localhost", 19999))
+server.bind(("127.0.0.1", 19999))
 server.listen(5)
 
 
