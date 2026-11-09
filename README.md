@@ -57,6 +57,30 @@ Run the following line to install the required libraries for this project:
 
 `pip3 install -r requirements.txt`
 
+Bonus Features
+==============
+
+Play Again:
+
+- When a player wins, both screens show the win message with "Space to play again" under it.
+- Press space to ask for a rematch. The text changes to "Waiting for opponent" until the other
+  player presses space too.
+- Once both players have pressed space the score goes back to 0 to 0 and a new game starts. Each
+  player keeps the same paddle.
+
+Initials and Leaderboard:
+
+- Each player types 1 to 3 letters or numbers in the Initials box before clicking Join. Lower case
+  letters are changed to upper case, so "nj" and "NJ" are the same player.
+- Every time a game ends the server adds one win for the winner's initials. The wins are saved in
+  `leaderboard.json` in the folder the server was started from, so they are still there after the
+  server is restarted.
+- To see the leaderboard, open a web browser while the server is running and go to
+  `http://<server ip>/`, or `http://127.0.0.1/` on the computer running the server. It lists every
+  player's initials and wins with the most wins at the top. Refresh the page to see new wins.
+- If the server could not open port 80 it prints a message and uses port 8080 for the leaderboard,
+  so go to `http://<server ip>:8080/` in that case.
+
 Known Bugs
 ==========
 - The server doesn't work because the logic isn't yet written.
