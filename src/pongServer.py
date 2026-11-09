@@ -27,7 +27,8 @@ stateLock = threading.Lock()
 
 
 def handleClient(conn: socket.socket, side: str) -> None:
-    # Purpose:      Runs in its own thread for one client and receives that client's update every frame
+    # Purpose:      Runs in its own thread for one client. Every frame it receives that client's
+    #               update, saves it, and sends back the other player's latest update
     # Arguments:
     # conn          The socket for this one client, returned by server.accept()
     # side          "left" or "right", the paddle this client controls
@@ -42,6 +43,15 @@ def handleClient(conn: socket.socket, side: str) -> None:
         with stateLock:
             # Save this player's newest information for the other thread to read
             gameState[side] = update
+
+            # Grab a copy of the opponent's latest update while still holding the lock. If the
+            # opponent has not sent anything yet, answer with a waiting message instead
+            opponentUpdate = gameState[opponentSide]
+            reply = dict(opponentUpdate) if opponentUpdate is not None else {"waiting": True}
+
+        # Send after the lock is released so a slow client never holds up the other player.
+        # Every update gets exactly one reply, so the client can send then receive each frame
+        sendMessage(conn, reply)
 
 
 #create the server socket, then bind and listen
