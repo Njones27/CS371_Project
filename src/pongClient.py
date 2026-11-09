@@ -186,7 +186,8 @@ def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
       errorLabel.config(text=f"Could not connect: {e}")
       errorLabel.update()
       return
-
+    errorLabel.config(text="Connected, wating for another player...")
+    errorLabel.update()
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
     #receive message function -- send message function must be implemented server side to send message,
     # client side will also need a send message function to send information to the server
