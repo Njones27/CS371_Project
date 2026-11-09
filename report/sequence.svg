@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="766" viewBox="0 0 860 766" font-family="Arial, Helvetica, sans-serif" fill="#111">
+<rect width="860" height="766" fill="#fff"/>
+<text x="430.0" y="28" text-anchor="middle" font-size="16" font-weight="bold">Messages between the two clients and the server</text>
+<rect x="75" y="46" width="130" height="32" fill="#e8eef7" stroke="#222"/>
+<text x="140" y="67" text-anchor="middle" font-size="14" font-weight="bold">Left client</text>
+<line x1="140" y1="78" x2="140" y2="752" stroke="#555" stroke-dasharray="4 4"/>
+<rect x="365" y="46" width="130" height="32" fill="#e8eef7" stroke="#222"/>
+<text x="430" y="67" text-anchor="middle" font-size="14" font-weight="bold">Server</text>
+<line x1="430" y1="78" x2="430" y2="752" stroke="#555" stroke-dasharray="4 4"/>
+<rect x="655" y="46" width="130" height="32" fill="#e8eef7" stroke="#222"/>
+<text x="720" y="67" text-anchor="middle" font-size="14" font-weight="bold">Right client</text>
+<line x1="720" y1="78" x2="720" y2="752" stroke="#555" stroke-dasharray="4 4"/>
+<line x1="140" y1="120" x2="430" y2="120" stroke="#222" stroke-width="1.5"/>
+<polygon points="430,120 422,116 422,124" fill="#222"/>
+<text x="285.0" y="114" text-anchor="middle" font-size="13">connect, send initials</text>
+<line x1="720" y1="154" x2="430" y2="154" stroke="#222" stroke-width="1.5"/>
+<polygon points="430,154 438,150 438,158" fill="#222"/>
+<text x="575.0" y="148" text-anchor="middle" font-size="13">connect, send initials</text>
+<line x1="430" y1="188" x2="140" y2="188" stroke="#222" stroke-width="1.5"/>
+<polygon points="140,188 148,184 148,192" fill="#222"/>
+<text x="285.0" y="182" text-anchor="middle" font-size="13">screen size, playerPaddle = left</text>
+<line x1="430" y1="222" x2="720" y2="222" stroke="#222" stroke-width="1.5"/>
+<polygon points="720,222 712,218 712,226" fill="#222"/>
+<text x="575.0" y="216" text-anchor="middle" font-size="13">screen size, playerPaddle = right</text>
+<line x1="140" y1="304" x2="430" y2="304" stroke="#222" stroke-width="1.5"/>
+<polygon points="430,304 422,300 422,308" fill="#222"/>
+<text x="285.0" y="298" text-anchor="middle" font-size="13">update (paddle, ball, score, sync)</text>
+<line x1="430" y1="338" x2="140" y2="338" stroke="#222" stroke-width="1.5"/>
+<polygon points="140,338 148,334 148,342" fill="#222"/>
+<text x="285.0" y="332" text-anchor="middle" font-size="13">right player's newest update</text>
+<line x1="720" y1="372" x2="430" y2="372" stroke="#222" stroke-width="1.5"/>
+<polygon points="430,372 438,368 438,376" fill="#222"/>
+<text x="575.0" y="366" text-anchor="middle" font-size="13">update (paddle, ball, score, sync)</text>
+<line x1="430" y1="406" x2="720" y2="406" stroke="#222" stroke-width="1.5"/>
+<polygon points="720,406 712,402 712,410" fill="#222"/>
+<text x="575.0" y="400" text-anchor="middle" font-size="13">left player's newest update</text>
+<rect x="30" y="252" width="800" height="172" fill="none" stroke="#888" stroke-dasharray="6 4"/>
+<rect x="30" y="252" width="278" height="22" fill="#eee" stroke="#888"/>
+<text x="39" y="267" font-size="12" font-weight="bold">Every frame while the game is being played</text>
+<rect x="166" y="446" width="528" height="26" fill="#fff8d6" stroke="#b9a44c"/>
+<text x="430" y="463" text-anchor="middle" font-size="12">Both updates show a score over 4, so the win is saved in leaderboard.json</text>
+<line x1="140" y1="542" x2="430" y2="542" stroke="#222" stroke-width="1.5"/>
+<polygon points="430,542 422,538 422,546" fill="#222"/>
+<text x="285.0" y="536" text-anchor="middle" font-size="13">update with playAgain = True</text>
+<line x1="430" y1="576" x2="140" y2="576" stroke="#222" stroke-width="1.5"/>
+<polygon points="140,576 148,572 148,580" fill="#222"/>
+<text x="285.0" y="570" text-anchor="middle" font-size="13">right player's newest update</text>
+<line x1="720" y1="610" x2="430" y2="610" stroke="#222" stroke-width="1.5"/>
+<polygon points="430,610 438,606 438,614" fill="#222"/>
+<text x="575.0" y="604" text-anchor="middle" font-size="13">update with playAgain = True</text>
+<line x1="430" y1="644" x2="720" y2="644" stroke="#222" stroke-width="1.5"/>
+<polygon points="720,644 712,640 712,648" fill="#222"/>
+<text x="575.0" y="638" text-anchor="middle" font-size="13">reset</text>
+<line x1="140" y1="678" x2="430" y2="678" stroke="#222" stroke-width="1.5"/>
+<polygon points="430,678 422,674 422,682" fill="#222"/>
+<text x="285.0" y="672" text-anchor="middle" font-size="13">update with the old score (thrown away)</text>
+<line x1="430" y1="712" x2="140" y2="712" stroke="#222" stroke-width="1.5"/>
+<polygon points="140,712 148,708 148,716" fill="#222"/>
+<text x="285.0" y="706" text-anchor="middle" font-size="13">reset</text>
+<rect x="30" y="490" width="800" height="240" fill="none" stroke="#888" stroke-dasharray="6 4"/>
+<rect x="30" y="490" width="278" height="22" fill="#eee" stroke="#888"/>
+<text x="39" y="505" font-size="12" font-weight="bold">After a win, once both players press space</text>
+</svg>
