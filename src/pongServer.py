@@ -19,6 +19,12 @@ import threading
 # I suggest you use the sync variable in pongClient.py to determine how out of sync your two
 # clients are and take actions to resync the games
 
+# Shared game state. Both client threads use these, so only touch them while holding stateLock
+# Most recent update sent by each player, None until that player has sent one
+gameState = {"left": None, "right": None}
+# Lets only one thread at a time use the shared state above
+stateLock = threading.Lock()
+
 #create the server socket, then bind and listen
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(("127.0.0.1", 19999))
