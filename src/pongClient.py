@@ -6,6 +6,9 @@
 # Misc:                     <Not Required.  Anything else you might want to include>
 # =================================================================================================
 
+# sendMessage(socket.socket,data: dict)
+# receiveMessage(socket.socket) -> dict
+from networkHelpers import sendMessage, receiveMessage
 import pygame
 import tkinter as tk
 import sys
@@ -187,11 +190,22 @@ def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
     #receive message function -- send message function must be implemented server side to send message,
     # client side will also need a send message function to send information to the server
-
+    try:
+        data = receiveMessage(client)
+    except(OSError,ValueError) as e:
+        errorLabel.config(text=f"Could not receive data: {e}")
+        errorLabel.update()
+        return
+    # data will be sent in the format {"screenWidth" : ###,"screenHeight" : ###, "playerPaddle" : "left" }
+    screenWidth = data["screenWidth"] # int
+    screenHeight = data["screenHeight"] # int
+    playerPaddle = data["playerPaddle"] # left or right string
+    '''
     # If you have messages you'd like to show the user use the errorLabel widget like so
     errorLabel.config(text=f"Some update text. You input: IP: {ip}, Port: {port}")
     # You may or may not need to call this, depending on how many times you update the label
     errorLabel.update()     
+    '''
 
     # Close this window and start the game with the info passed to you from the server
     #app.withdraw()     # Hides the window (we'll kill it later)
