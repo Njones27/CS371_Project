@@ -11,6 +11,8 @@
 from networkHelpers import sendMessage, receiveMessage
 import socket
 import threading
+import json
+import os
 
 # Use this file to write your server logic
 # You will need to support at least two clients
@@ -23,11 +25,59 @@ import threading
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 480
 
+# File the win counts are saved in, so they are still there after the server restarts
+LEADERBOARD_FILE = "leaderboard.json"
+
 # Shared game state. Both client threads use these, so only touch them while holding stateLock
 # Most recent update sent by each player, None until that player has sent one
 gameState = {"left": None, "right": None}
+# Initials each player typed in, used as their name on the leaderboard
+initials = {"left": "", "right": ""}
+# True once the current game's win has been saved, so a game is only counted one time
+winRecorded = False
 # Lets only one thread at a time use the shared state above
 stateLock = threading.Lock()
+
+
+def loadWins() -> dict:
+    # Purpose:      Reads the saved win counts from the leaderboard file
+    # Returns:      A dictionary of initials to wins, for example {"NJ": 3, "RR": 2}
+
+    # No file yet means nobody has won a game
+    if not os.path.exists(LEADERBOARD_FILE):
+        return {}
+    with open(LEADERBOARD_FILE, "r") as f:
+        return json.load(f)
+
+
+def recordWin(playerInitials: str) -> None:
+    # Purpose:      Adds one win for a player and saves the leaderboard file
+    # Arguments:
+    # playerInitials    The initials of the player who won the game
+
+    wins = loadWins()
+    # A player who has never won before starts at 0
+    wins[playerInitials] = wins.get(playerInitials, 0) + 1
+    with open(LEADERBOARD_FILE, "w") as f:
+        json.dump(wins, f)
+
+
+def findWinner(update: dict, opponentUpdate: dict) -> str:
+    # Purpose:      Works out if the game is over, using the same "more than 4" rule as the win
+    #               message in pongClient.py. Both players' games have to agree before it counts,
+    #               because the two games can be a frame or two apart
+    # Arguments:
+    # update            The newest update from one player
+    # opponentUpdate    The newest update from the other player, or None if there is not one yet
+    # Returns:      "left" or "right" for the winning side, or "" if nobody has won yet
+
+    if opponentUpdate is None:
+        return ""
+    if update.get("lScore", 0) > 4 and opponentUpdate.get("lScore", 0) > 4:
+        return "left"
+    if update.get("rScore", 0) > 4 and opponentUpdate.get("rScore", 0) > 4:
+        return "right"
+    return ""
 
 
 def handleClient(conn: socket.socket, side: str) -> None:
@@ -36,6 +86,7 @@ def handleClient(conn: socket.socket, side: str) -> None:
     # Arguments:
     # conn          The socket for this one client, returned by server.accept()
     # side          "left" or "right", the paddle this client controls
+    global winRecorded
 
     # The other player's key in gameState
     opponentSide = "right" if side == "left" else "left"
@@ -47,6 +98,12 @@ def handleClient(conn: socket.socket, side: str) -> None:
         with stateLock:
             # Save this player's newest information for the other thread to read
             gameState[side] = update
+
+            # Count the win one time. findWinner only names a winner once both games agree
+            winnerSide = findWinner(update, gameState[opponentSide])
+            if not winRecorded and winnerSide:
+                recordWin(initials[winnerSide])
+                winRecorded = True
 
             # Grab a copy of the opponent's latest update while still holding the lock. If the
             # opponent has not sent anything yet, answer with a waiting message instead
@@ -72,6 +129,10 @@ for side in ["left", "right"]:
     # Waits until a client connects, then gives back a socket just for that client
     conn, addr = server.accept()
     print(f"The {side} player connected from {addr[0]}")
+
+    # The first message from the client is its initials for the leaderboard
+    hello = receiveMessage(conn)
+    initials[side] = hello["initials"]
 
     # Remember this client until both players have joined
     clients.append((conn, side))
