@@ -168,14 +168,24 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 # the screen width, height and player paddle (either "left" or "right")
 # If you want to hard code the screen's dimensions into the code, that's fine, but you will need to know
 # which client is which
-def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
+def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -> None:
     # Purpose:      This method is fired when the join button is clicked
     # Arguments:
     # ip            A string holding the IP address of the server
     # port          A string holding the port the server is using
+    # initials      A string holding what the player typed in the Initials box, used for the leaderboard
     # errorLabel    A tk label widget, modify it's text to display messages to the user (example below)
     # app           The tk window object, needed to kill the window
-    
+
+    # Clean up the initials before connecting. strip() removes spaces, upper() makes "nj" and "NJ"
+    # count as the same player, and [:3] keeps at most 3 characters
+    initials = initials.strip().upper()[:3]
+    # isalnum() is False for an empty box or symbols, so the player cannot join without real initials
+    if not initials.isalnum():
+        errorLabel.config(text="Enter 1 to 3 letters or numbers for your initials")
+        errorLabel.update()
+        return
+
     # Create a socket and connect to the server
     # You don't have to use SOCK_STREAM, use what you think is best
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -188,6 +198,11 @@ def joinServer(ip:str, port:str, errorLabel:tk.Label, app:tk.Tk) -> None:
       return
     errorLabel.config(text="Connected, wating for another player...")
     errorLabel.update()
+
+    # Tell the server who this player is so wins can be saved under these initials. The server
+    # reads this first, and once both players have joined it sends back the screen size and paddle side
+    sendMessage(client, {"initials": initials})
+
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
     #receive message function -- send message function must be implemented server side to send message,
     # client side will also need a send message function to send information to the server
@@ -236,11 +251,19 @@ def startScreen():
     portEntry = tk.Entry(app)
     portEntry.grid(column=1, row=2)
 
-    errorLabel = tk.Label(text="")
-    errorLabel.grid(column=0, row=4, columnspan=2)
+    # Initials box for the leaderboard, built the same way as the IP and port boxes
+    initialsLabel = tk.Label(text="Initials:")
+    initialsLabel.grid(column=0, row=3, sticky="W", padx=8)
 
-    joinButton = tk.Button(text="Join", command=lambda: joinServer(ipEntry.get(), portEntry.get(), errorLabel, app))
-    joinButton.grid(column=0, row=3, columnspan=2)
+    initialsEntry = tk.Entry(app)
+    initialsEntry.grid(column=1, row=3)
+
+    # The error label and Join button each moved down one row to make room for the initials box
+    errorLabel = tk.Label(text="")
+    errorLabel.grid(column=0, row=5, columnspan=2)
+
+    joinButton = tk.Button(text="Join", command=lambda: joinServer(ipEntry.get(), portEntry.get(), initialsEntry.get(), errorLabel, app))
+    joinButton.grid(column=0, row=4, columnspan=2)
 
     app.mainloop()
 
