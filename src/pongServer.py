@@ -19,6 +19,10 @@ import threading
 # I suggest you use the sync variable in pongClient.py to determine how out of sync your two
 # clients are and take actions to resync the games
 
+# Screen size sent to both clients so the two games always match
+SCREEN_WIDTH = 640
+SCREEN_HEIGHT = 480
+
 # Shared game state. Both client threads use these, so only touch them while holding stateLock
 # Most recent update sent by each player, None until that player has sent one
 gameState = {"left": None, "right": None}
@@ -72,6 +76,10 @@ for side in ["left", "right"]:
 # Both players have joined, so start the game for both of them at the same time
 threads = []
 for conn, side in clients:
+    # Tell the client the screen size and which paddle it controls. The client waits for this
+    # message before it opens the game window
+    sendMessage(conn, {"screenWidth": SCREEN_WIDTH, "screenHeight": SCREEN_HEIGHT, "playerPaddle": side})
+
     # One thread per client so the server can listen to both players at once
     t = threading.Thread(target=handleClient, args=(conn, side), daemon=True)
     t.start()
