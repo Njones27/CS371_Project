@@ -59,5 +59,24 @@ server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(("127.0.0.1", 19999))
 server.listen(5)
 
+# Accept exactly two clients. The first to connect is the left paddle and the second is the right
+clients = []
+for side in ["left", "right"]:
+    # Waits until a client connects, then gives back a socket just for that client
+    conn, addr = server.accept()
+    print(f"The {side} player connected from {addr[0]}")
 
+    # Remember this client until both players have joined
+    clients.append((conn, side))
 
+# Both players have joined, so start the game for both of them at the same time
+threads = []
+for conn, side in clients:
+    # One thread per client so the server can listen to both players at once
+    t = threading.Thread(target=handleClient, args=(conn, side), daemon=True)
+    t.start()
+    threads.append(t)
+
+# Keep the main program open until both client threads have finished
+for t in threads:
+    t.join()
