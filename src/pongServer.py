@@ -25,6 +25,25 @@ gameState = {"left": None, "right": None}
 # Lets only one thread at a time use the shared state above
 stateLock = threading.Lock()
 
+
+def handleClient(conn: socket.socket, side: str) -> None:
+    # Purpose:      Runs in its own thread for one client and receives that client's update every frame
+    # Arguments:
+    # conn          The socket for this one client, returned by server.accept()
+    # side          "left" or "right", the paddle this client controls
+
+    # The other player's key in gameState
+    opponentSide = "right" if side == "left" else "left"
+
+    while True:
+        # Wait for this client's next update. receiveMessage returns one full dictionary
+        update = receiveMessage(conn)
+
+        with stateLock:
+            # Save this player's newest information for the other thread to read
+            gameState[side] = update
+
+
 #create the server socket, then bind and listen
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(("127.0.0.1", 19999))
