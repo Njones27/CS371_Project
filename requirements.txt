@@ -1,1 +1,3 @@
 pygame==2.5.2
+# The bonus features (Play Again, initials, win tracking and the leaderboard webpage) only use
+# modules that come with Python (json, os, html, http.server), so there is nothing new to install
