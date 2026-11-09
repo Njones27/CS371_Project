@@ -6,6 +6,9 @@
 # Misc:                     <Not Required.  Anything else you might want to include>
 # =================================================================================================
 
+# sendMessage(socket.socket,data: dict)
+# receiveMessage(socket.socket) -> dict
+from networkHelpers import sendMessage, receiveMessage
 import socket
 import threading
 
