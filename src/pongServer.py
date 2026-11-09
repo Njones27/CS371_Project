@@ -35,6 +35,10 @@ gameState = {"left": None, "right": None}
 initials = {"left": "", "right": ""}
 # True once the current game's win has been saved, so a game is only counted one time
 winRecorded = False
+# Sides that have pressed space to play again
+playAgainVotes = set()
+# Sides that still need to be told the game was reset
+resetPending = set()
 # Lets only one thread at a time use the shared state above
 stateLock = threading.Lock()
 
@@ -96,19 +100,39 @@ def handleClient(conn: socket.socket, side: str) -> None:
         update = receiveMessage(conn)
 
         with stateLock:
-            # Save this player's newest information for the other thread to read
-            gameState[side] = update
+            if side in resetPending:
+                # This client has not heard about the rematch yet. Its update still holds the old
+                # winning score, so throw it away and tell the client to reset
+                resetPending.discard(side)
+                reply = {"reset": True}
+            else:
+                # Save this player's newest information for the other thread to read
+                gameState[side] = update
 
-            # Count the win one time. findWinner only names a winner once both games agree
-            winnerSide = findWinner(update, gameState[opponentSide])
-            if not winRecorded and winnerSide:
-                recordWin(initials[winnerSide])
-                winRecorded = True
+                # Count the win one time. findWinner only names a winner once both games agree
+                winnerSide = findWinner(update, gameState[opponentSide])
+                if not winRecorded and winnerSide:
+                    recordWin(initials[winnerSide])
+                    winRecorded = True
 
-            # Grab a copy of the opponent's latest update while still holding the lock. If the
-            # opponent has not sent anything yet, answer with a waiting message instead
-            opponentUpdate = gameState[opponentSide]
-            reply = dict(opponentUpdate) if opponentUpdate is not None else {"waiting": True}
+                # Remember that this player asked for a rematch
+                if update.get("playAgain"):
+                    playAgainVotes.add(side)
+
+                if playAgainVotes == {"left", "right"}:
+                    # Both players want a rematch, so wipe the old game
+                    playAgainVotes.clear()
+                    gameState["left"] = None
+                    gameState["right"] = None
+                    winRecorded = False
+                    # This client is told right now, the other one on its next update
+                    resetPending.add(opponentSide)
+                    reply = {"reset": True}
+                else:
+                    # Normal frame. Grab a copy of the opponent's latest update while still holding
+                    # the lock. If the opponent has not sent anything yet, answer with a waiting message
+                    opponentUpdate = gameState[opponentSide]
+                    reply = dict(opponentUpdate) if opponentUpdate is not None else {"waiting": True}
 
         # Send after the lock is released so a slow client never holds up the other player.
         # Every update gets exactly one reply, so the client can send then receive each frame
