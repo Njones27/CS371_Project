@@ -60,7 +60,10 @@ def handleClient(conn: socket.socket, side: str) -> None:
 
 #create the server socket, then bind and listen
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(("127.0.0.1", 19999))
+# Lets the server be restarted right away without an "address already in use" error
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+# 0.0.0.0 accepts connections from other computers, 127.0.0.1 only accepted this one
+server.bind(("0.0.0.0", 19999))
 server.listen(5)
 
 # Accept exactly two clients. The first to connect is the left paddle and the second is the right
