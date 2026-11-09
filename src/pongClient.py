@@ -63,6 +63,13 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
     sync = 0
 
+    # Play Again. playAgain turns True once this player presses space after a win. It needs to be
+    # sent to the server as "playAgain": playAgain in the update dictionary
+    playAgain = False
+    # The server's latest answer. Starts empty so the reset check at the bottom of the loop is
+    # safe to run before the first answer arrives
+    reply = {}
+
     while True:
         # Wiping the screen
         screen.fill((0,0,0))
@@ -78,6 +85,10 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
                 elif event.key == pygame.K_UP:
                     playerPaddleObj.moving = "up"
+
+                # Space asks for a rematch, but it only counts once someone has already won
+                elif event.key == pygame.K_SPACE and (lScore > 4 or rScore > 4):
+                    playAgain = True
 
             elif event.type == pygame.KEYUP:
                 playerPaddleObj.moving = ""
@@ -106,6 +117,12 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             textRect = textSurface.get_rect()
             textRect.center = ((screenWidth/2), screenHeight/2)
             winMessage = screen.blit(textSurface, textRect)
+
+            # Under the win message, tell the player how to ask for a rematch. Once they have
+            # pressed space the text changes so they know it worked
+            againText = "Waiting for opponent" if playAgain else "Space to play again"
+            againSurface = winFont.render(againText, False, WHITE, (0,0,0))
+            screen.blit(againSurface, againSurface.get_rect(center=(screenWidth/2, screenHeight/2 + 50)))
         else:
 
             # ==== Ball Logic =====================================================================
@@ -160,6 +177,13 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # opponent's game
 
         # =========================================================================================
+
+        # Play Again. When the server says both players want a rematch, put everything back to how
+        # it was at the start of playGame. .get is used because most replies do not have a "reset" key
+        if reply.get("reset"):
+            lScore, rScore, sync, playAgain = 0, 0, 0, False
+            ball.reset(nowGoing="left")
+            leftPaddle.rect.y = rightPaddle.rect.y = paddleStartPosY
 
 
 
