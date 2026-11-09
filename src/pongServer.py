@@ -13,6 +13,8 @@ import socket
 import threading
 import json
 import os
+import html
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # Use this file to write your server logic
 # You will need to support at least two clients
@@ -27,6 +29,10 @@ SCREEN_HEIGHT = 480
 
 # File the win counts are saved in, so they are still there after the server restarts
 LEADERBOARD_FILE = "leaderboard.json"
+
+# Port for the leaderboard webpage, plus a backup for when the server is not run as admin
+WEB_PORT = 80
+BACKUP_WEB_PORT = 8080
 
 # Shared game state. Both client threads use these, so only touch them while holding stateLock
 # Most recent update sent by each player, None until that player has sent one
@@ -139,6 +145,48 @@ def handleClient(conn: socket.socket, side: str) -> None:
         sendMessage(conn, reply)
 
 
+class LeaderboardHandler(BaseHTTPRequestHandler):
+    # Purpose:      Answers web browser requests with the leaderboard page
+
+    def do_GET(self) -> None:
+        # Purpose:      Runs every time a browser asks for a page. Any path shows the leaderboard
+
+        # Read the saved wins inside the lock so a game thread is never writing the file at the same time
+        with stateLock:
+            wins = loadWins()
+        # Most wins first
+        ranked = sorted(wins.items(), key=lambda item: item[1], reverse=True)
+
+        # One table row per player. html.escape makes odd initials show up as plain text
+        rows = "".join(f"<tr><td>{html.escape(name)}</td><td>{count}</td></tr>" for name, count in ranked)
+        body = ("<html><head><title>Pong Leaderboard</title></head><body><h1>Pong Leaderboard</h1>"
+                f"<table><tr><th>Player</th><th>Wins</th></tr>{rows}</table></body></html>").encode()
+
+        # 200 means OK. The headers tell the browser it is a webpage and how many bytes long it is
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def startLeaderboard() -> None:
+    # Purpose:      Starts the leaderboard webpage in its own thread so it runs next to the game
+
+    # Port 80 needs admin rights, so try the backup port if it cannot be opened
+    for port in [WEB_PORT, BACKUP_WEB_PORT]:
+        try:
+            webServer = HTTPServer(("0.0.0.0", port), LeaderboardHandler)
+        except OSError as e:
+            print(f"Could not start the leaderboard on port {port}: {e}")
+            continue
+        # daemon=True so this thread never keeps the server open by itself
+        threading.Thread(target=webServer.serve_forever, daemon=True).start()
+        print(f"Leaderboard running on port {port}")
+        return
+    print("The leaderboard page is off for this run, the game itself still works")
+
+
 #create the server socket, then bind and listen
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # Lets the server be restarted right away without an "address already in use" error
@@ -146,6 +194,9 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 # 0.0.0.0 accepts connections from other computers, 127.0.0.1 only accepted this one
 server.bind(("0.0.0.0", 19999))
 server.listen(5)
+
+# Start the leaderboard webpage before any players join
+startLeaderboard()
 
 # Accept exactly two clients. The first to connect is the left paddle and the second is the right
 clients = []
