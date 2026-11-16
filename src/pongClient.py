@@ -175,7 +175,22 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # =========================================================================================
         # Send your server update here at the end of the game loop to sync your game with your
         # opponent's game
+        # create the update frame to send to the server 
+        update = {
+            "paddleY":playerPaddleObj.rect.y,
+            "moving": playerPaddleObj.moving,
+            "ballX": ball.rect.x,
+            "ballY": ball.rect.y,
+            "ballXVel": ball.xVel,
+            "ballYVel": ball.yVel,
+            "lScore": lScore,
+            "rScore": rScore,
+            "sync": sync,
+            "playAgain": playAgain
 
+        }
+        sendMessage(client,update)
+        reply = receiveMessage(client)
         # =========================================================================================
 
         # Play Again. When the server says both players want a rematch, put everything back to how
