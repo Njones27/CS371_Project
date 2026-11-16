@@ -190,7 +190,24 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 
         }
         sendMessage(client,update)
+        # recieve opponents data
         reply = receiveMessage(client)
+        # update opponenet paddle object if reply was received
+        if "paddleY" in reply:
+            opponentPaddleObj.rect.y = reply["paddleY"]
+            opponentPaddleObj.moving = reply["moving"]
+            # if opponent is ahead use their information to update game data
+            # ignores on "waiting" since paddleY update is not sent for a waiting reply
+            if reply["sync"] > sync:
+                ball.rect.x = reply["ballX"]
+                ball.rect.y = reply["ballY"]
+                lScore = reply["lScore"]
+                rScore = reply["rScore"]
+                sync = reply["sync"]
+                ball.xVel = reply["ballXVel"]
+                ball.yVel = reply["ballYVel"]
+         
+
         # =========================================================================================
 
         # Play Again. When the server says both players want a rematch, put everything back to how
