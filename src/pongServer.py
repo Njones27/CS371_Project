@@ -158,7 +158,7 @@ def handleClient(conn: socket.socket, side: str) -> None:
                     # Normal frame. Grab a copy of the opponent's latest update while still holding
                     # the lock. If the opponent has not sent anything yet, answer with a waiting message
                     opponentUpdate = gameState[opponentSide]
-                    reply = dict(opponentUpdate) if opponentUpdate is not None else {"waiting": True}
+                    reply = synchronizeGames(update, opponentUpdate)
 
         # Send after the lock is released so a slow client never holds up the other player.
         # Every update gets exactly one reply, so the client can send then receive each frame
