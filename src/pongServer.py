@@ -59,6 +59,26 @@ def loadWins() -> dict:
     with open(LEADERBOARD_FILE, "r") as f:
         return json.load(f)
 
+def synchronizeGames(update: dict, opponentUpdate: dict) -> dict:
+    #Purpose : Compare game states and determine if synchronization is needed
+    # update          The current client's game state
+    # opponentUpdate  The opponent's most recent game state
+    # Returns:        The opponent's state, with a sync instruction if necessary
+
+    if opponentUpdate is None:
+        return{"waiting", true}
+    #compare clients to see if they are far enough apart to warrant a syncing
+    syncDifference = abs(update.get("sync", 0) - opponentUpdate.get("sync,0"))
+    #if so, synchronize
+    if syncDifference > 2:
+        return {
+            "sync": True,
+            "syncDifference": syncDifference,
+            "opponentState": opponentUpdate
+        }
+    #if not return the normal game state
+    return dict(opponentUpdate)
+
 
 def recordWin(playerInitials: str) -> None:
     # Purpose:      Adds one win for a player and saves the leaderboard file
