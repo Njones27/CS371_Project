@@ -47,6 +47,8 @@ playAgainVotes = set()
 resetPending = set()
 # Lets only one thread at a time use the shared state above
 stateLock = threading.Lock()
+# Each player's socket, so when one player leaves their thread can also hang up on the other player
+connections = {"left": None, "right": None}
 
 
 def loadWins() -> dict:
@@ -66,18 +68,17 @@ def synchronizeGames(update: dict, opponentUpdate: dict) -> dict:
     # Returns:        The opponent's state, with a sync instruction if necessary
 
     if opponentUpdate is None:
-        return{"waiting", true}
+        return {"waiting": True}
     #compare clients to see if they are far enough apart to warrant a syncing
-    syncDifference = abs(update.get("sync", 0) - opponentUpdate.get("sync,0"))
-    #if so, synchronize
+    syncDifference = abs(update.get("sync", 0) - opponentUpdate.get("sync", 0))
+    # Always send the opponent's full update. The client looks for "paddleY" and compares
+    # reply["sync"] (a frame number) with its own to copy the ahead player's ball and score,
+    # so those keys have to stay at the top level and "sync" must not be replaced with True
+    reply = dict(opponentUpdate)
+    #if they are far apart, also say by how much
     if syncDifference > 2:
-        return {
-            "sync": True,
-            "syncDifference": syncDifference,
-            "opponentState": opponentUpdate
-        }
-    #if not return the normal game state
-    return dict(opponentUpdate)
+        reply["syncDifference"] = syncDifference
+    return reply
 
 
 def recordWin(playerInitials: str) -> None:
@@ -121,48 +122,68 @@ def handleClient(conn: socket.socket, side: str) -> None:
     # The other player's key in gameState
     opponentSide = "right" if side == "left" else "left"
 
-    while True:
-        # Wait for this client's next update. receiveMessage returns one full dictionary
-        update = receiveMessage(conn)
+    try:
+        while True:
+            # Wait for this client's next update. receiveMessage returns one full dictionary
+            update = receiveMessage(conn)
 
-        with stateLock:
-            if side in resetPending:
-                # This client has not heard about the rematch yet. Its update still holds the old
-                # winning score, so throw it away and tell the client to reset
-                resetPending.discard(side)
-                reply = {"reset": True}
-            else:
-                # Save this player's newest information for the other thread to read
-                gameState[side] = update
-
-                # Count the win one time. findWinner only names a winner once both games agree
-                winnerSide = findWinner(update, gameState[opponentSide])
-                if not winRecorded and winnerSide:
-                    recordWin(initials[winnerSide])
-                    winRecorded = True
-
-                # Remember that this player asked for a rematch
-                if update.get("playAgain"):
-                    playAgainVotes.add(side)
-
-                if playAgainVotes == {"left", "right"}:
-                    # Both players want a rematch, so wipe the old game
-                    playAgainVotes.clear()
-                    gameState["left"] = None
-                    gameState["right"] = None
-                    winRecorded = False
-                    # This client is told right now, the other one on its next update
-                    resetPending.add(opponentSide)
+            with stateLock:
+                if side in resetPending:
+                    # This client has not heard about the rematch yet. Its update still holds the old
+                    # winning score, so throw it away and tell the client to reset
+                    resetPending.discard(side)
                     reply = {"reset": True}
                 else:
-                    # Normal frame. Grab a copy of the opponent's latest update while still holding
-                    # the lock. If the opponent has not sent anything yet, answer with a waiting message
-                    opponentUpdate = gameState[opponentSide]
-                    reply = synchronizeGames(update, opponentUpdate)
+                    # Save this player's newest information for the other thread to read
+                    gameState[side] = update
 
-        # Send after the lock is released so a slow client never holds up the other player.
-        # Every update gets exactly one reply, so the client can send then receive each frame
-        sendMessage(conn, reply)
+                    # Count the win one time. findWinner only names a winner once both games agree
+                    winnerSide = findWinner(update, gameState[opponentSide])
+                    if not winRecorded and winnerSide:
+                        recordWin(initials[winnerSide])
+                        winRecorded = True
+
+                    # Remember that this player asked for a rematch
+                    if update.get("playAgain"):
+                        playAgainVotes.add(side)
+
+                    if playAgainVotes == {"left", "right"}:
+                        # Both players want a rematch, so wipe the old game
+                        playAgainVotes.clear()
+                        gameState["left"] = None
+                        gameState["right"] = None
+                        winRecorded = False
+                        # This client is told right now, the other one on its next update
+                        resetPending.add(opponentSide)
+                        reply = {"reset": True}
+                    else:
+                        # Normal frame. Grab a copy of the opponent's latest update while still holding
+                        # the lock. If the opponent has not sent anything yet, answer with a waiting message
+                        opponentUpdate = gameState[opponentSide]
+                        reply = synchronizeGames(update, opponentUpdate)
+
+            # Send after the lock is released so a slow client never holds up the other player.
+            # Every update gets exactly one reply, so the client can send then receive each frame
+            sendMessage(conn, reply)
+
+    # The player closed their game or lost their connection. ConnectionError comes from receiveMessage
+    # when the client hangs up, OSError covers other network errors and ValueError a half sent message
+    except (ConnectionError, OSError, ValueError) as e:
+        print(f"The {side} player disconnected: {e}")
+
+    # finally runs no matter how the loop ended, so the sockets always get cleaned up
+    finally:
+        conn.close()
+        # Hang up on the other player too, so their game closes instead of playing against a frozen
+        # paddle. shutdown() wakes up their thread, which is stuck waiting in receiveMessage, and
+        # their client sees the connection close and exits through quitGame
+        otherConn = connections[opponentSide]
+        if otherConn is not None:
+            try:
+                otherConn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                # Already closed, because that player left first
+                pass
 
 
 class LeaderboardHandler(BaseHTTPRequestHandler):
@@ -231,6 +252,7 @@ for side in ["left", "right"]:
 
     # Remember this client until both players have joined
     clients.append((conn, side))
+    connections[side] = conn
 
 # Both players have joined, so start the game for both of them at the same time
 threads = []
