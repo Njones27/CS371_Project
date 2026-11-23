@@ -16,11 +16,33 @@ import socket
 
 from assets.code.helperCode import *
 
+def quitGame(client:socket.socket, reason:str) -> None:
+    # Purpose:      Shuts the game down cleanly. Used both when the player closes the window and
+    #               when the server stops answering, so the program always closes the same way
+    # Arguments:
+    # client        The socket connected to the server
+    # reason        A short message printed in the terminal saying why the game closed
+    # Returns:      Nothing. sys.exit() ends the program
+    print(reason)
+    # Closing the socket tells the server this player is gone instead of leaving it waiting
+    client.close()
+    pygame.quit()
+    sys.exit()
+
 # This is the main game loop.  For the most part, you will not need to modify this.  The sections
 # where you should add to the code are marked.  Feel free to change any part of this project
 # to suit your needs.
 def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.socket) -> None:
-    
+    # Purpose:      Runs the game at 60 frames a second. Every frame it reads the keys, moves the
+    #               paddles and ball, draws the screen, sends this player's update to the server
+    #               and uses the server's reply to move the opponent and stay in sync
+    # Arguments:
+    # screenWidth   Width of the game window in pixels, sent by the server
+    # screenHeight  Height of the game window in pixels, sent by the server
+    # playerPaddle  "left" or "right", the paddle this player controls, sent by the server
+    # client        The socket already connected to the server in joinServer
+    # Returns:      Nothing. The loop only ends when quitGame closes the program
+
     # Pygame inits
     pygame.mixer.pre_init(44100, -16, 2, 2048)
     pygame.init()
@@ -77,8 +99,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # Getting keypress events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+                quitGame(client, "You closed the game")
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_DOWN:
                     playerPaddleObj.moving = "down"
@@ -189,9 +210,15 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             "playAgain": playAgain
 
         }
-        sendMessage(client,update)
-        # recieve opponents data
-        reply = receiveMessage(client)
+        # If the server closed or crashed, sending or receiving raises an exception instead of
+        # returning. ConnectionError comes from receiveMessage when the server hangs up, OSError covers
+        # other network errors (like a reset connection) and ValueError covers a half sent message
+        try:
+            sendMessage(client,update)
+            # recieve opponents data
+            reply = receiveMessage(client)
+        except (ConnectionError, OSError, ValueError) as e:
+            quitGame(client, f"Lost connection to the server, closing the game: {e}")
         # update opponenet paddle object if reply was received
         if "paddleY" in reply:
             opponentPaddleObj.rect.y = reply["paddleY"]
@@ -232,6 +259,7 @@ def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -
     # initials      A string holding what the player typed in the Initials box, used for the leaderboard
     # errorLabel    A tk label widget, modify it's text to display messages to the user (example below)
     # app           The tk window object, needed to kill the window
+    # Returns:      Nothing. Shows an error in errorLabel and returns early if joining fails
 
     # Clean up the initials before connecting. strip() removes spaces, upper() makes "nj" and "NJ"
     # count as the same player, and [:3] keeps at most 3 characters
@@ -251,6 +279,8 @@ def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -
     except (OSError, ValueError) as e:
       errorLabel.config(text=f"Could not connect: {e}")
       errorLabel.update()
+      # Close the socket that failed so a fresh one is made if the player clicks Join again
+      client.close()
       return
     errorLabel.config(text="Connected, wating for another player...")
     errorLabel.update()
@@ -267,6 +297,7 @@ def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -
     except(OSError,ValueError) as e:
         errorLabel.config(text=f"Could not receive data: {e}")
         errorLabel.update()
+        client.close()
         return
     # data will be sent in the format {"screenWidth" : ###,"screenHeight" : ###, "playerPaddle" : "left" }
     screenWidth = data["screenWidth"] # int
@@ -286,7 +317,11 @@ def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -
 
 
 # This displays the opening screen, you don't need to edit this (but may if you like)
-def startScreen():
+def startScreen() -> None:
+    # Purpose:      Builds the start window with the logo, the Server IP, Server Port and Initials
+    #               boxes, the Join button and the message label, then waits for the player
+    # Arguments:    None
+    # Returns:      Nothing. Clicking Join calls joinServer with what the player typed
     app = tk.Tk()
     app.title("Server Info")
 
