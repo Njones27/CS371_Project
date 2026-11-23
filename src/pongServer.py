@@ -53,6 +53,7 @@ connections = {"left": None, "right": None}
 
 def loadWins() -> dict:
     # Purpose:      Reads the saved win counts from the leaderboard file
+    # Arguments:    None
     # Returns:      A dictionary of initials to wins, for example {"NJ": 3, "RR": 2}
 
     # No file yet means nobody has won a game
@@ -62,10 +63,12 @@ def loadWins() -> dict:
         return json.load(f)
 
 def synchronizeGames(update: dict, opponentUpdate: dict) -> dict:
-    #Purpose : Compare game states and determine if synchronization is needed
-    # update          The current client's game state
-    # opponentUpdate  The opponent's most recent game state
-    # Returns:        The opponent's state, with a sync instruction if necessary
+    # Purpose:      Compares the two players' game states and builds the reply for this player
+    # Arguments:
+    # update            The current client's game state
+    # opponentUpdate    The opponent's most recent game state, or None if there is not one yet
+    # Returns:      {"waiting": True} if the opponent has not sent anything yet, otherwise a copy of
+    #               the opponent's state, plus "syncDifference" if the two games are more than 2 frames apart
 
     if opponentUpdate is None:
         return {"waiting": True}
@@ -85,6 +88,7 @@ def recordWin(playerInitials: str) -> None:
     # Purpose:      Adds one win for a player and saves the leaderboard file
     # Arguments:
     # playerInitials    The initials of the player who won the game
+    # Returns:      Nothing. The new count is saved in leaderboard.json
 
     wins = loadWins()
     # A player who has never won before starts at 0
@@ -117,6 +121,7 @@ def handleClient(conn: socket.socket, side: str) -> None:
     # Arguments:
     # conn          The socket for this one client, returned by server.accept()
     # side          "left" or "right", the paddle this client controls
+    # Returns:      Nothing. Ends when either player disconnects, after closing both players' sockets
     global winRecorded
 
     # The other player's key in gameState
@@ -191,6 +196,8 @@ class LeaderboardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         # Purpose:      Runs every time a browser asks for a page. Any path shows the leaderboard
+        # Arguments:    None besides self. The request details are stored on self by BaseHTTPRequestHandler
+        # Returns:      Nothing. The page is written to the browser with self.wfile.write
 
         # Read the saved wins inside the lock so a game thread is never writing the file at the same time
         with stateLock:
@@ -213,6 +220,8 @@ class LeaderboardHandler(BaseHTTPRequestHandler):
 
 def startLeaderboard() -> None:
     # Purpose:      Starts the leaderboard webpage in its own thread so it runs next to the game
+    # Arguments:    None
+    # Returns:      Nothing. Prints which port the page is on, or that it is off for this run
 
     # Port 80 needs admin rights, so try the backup port if it cannot be opened
     for port in [WEB_PORT, BACKUP_WEB_PORT]:
