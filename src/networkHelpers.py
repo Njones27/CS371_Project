@@ -9,16 +9,30 @@
 
 import json
 import socket
-
+import os
+from cryptography.fernet import Fernet, InvalidToken #used for encrypted communication:
 
 # Leftover bytes for each socket, kept between receiveMessage calls
 buffers = {}
+KEY_FILE = os.path.join(os.path.dirname(__file__),"secret.key")
+file = open(KEY_FILE, "rb")
+try:
+    key = file.read().strip()
+finally:
+    file.close()
+cipher = Fernet(key)
+
 
 def sendMessage(sock: socket.socket, data: dict) -> None:
     # Package data into JSON text using \n to mark end of message
-    packet = json.dumps(data) + "\n"
+    packet = json.dumps(data) #\n character that marks end of packet
+    # must be added after encryption or it will be encrypted 
     # Convert text to bytes
     packet = packet.encode()
+    # Encrypt packet
+    packet = cipher.encrypt(packet)
+    # since packet was converted to bytes using encode b"\n" must be used
+    packet = packet + b"\n"
     # Send packet
     sock.sendall(packet)
 
@@ -37,7 +51,11 @@ def receiveMessage(sock: socket.socket) -> dict:
     message, buffer = buffer.split(b"\n", 1)
     # Save the leftovers for the next call
     buffers[sock] = buffer
-    # Turn the message from bytes back into a dict and return it
+    # decrypt then turn the message from bytes back into a dict and return it
+    try:
+        message = cipher.decrypt(message)
+    except InvalidToken:
+        raise ValueError("Could not decrypt message")
     return json.loads(message.decode())
 
 
