@@ -1,9 +1,13 @@
 # =================================================================================================
-# Contributing Authors:	    Ryan Rice
+# Contributing Authors:	    Ryan Rice, Nathan Jones
 # Email Addresses:          rlri231@uky.edu
-# Date:                     10.27.2026
-# Purpose:                  <How this file contributes to the project>
-# Misc:                     <Not Required.  Anything else you might want to include>
+# Date:                     11.26.2026
+# Purpose:                  The client side of the game. The start screen collects the server address,
+#                           initials, username and password, then the game loop sends this player's
+#                           paddle, ball, score and sync to the server every frame and uses the reply to
+#                           draw the opponent (or both players, when watching as a spectator)
+# Misc:                     Run from inside src/ so the fonts, sounds and images in ./assets are found.
+#                           Every message goes through networkHelpers.py, so it is encrypted
 # =================================================================================================
 
 # sendMessage(socket.socket,data: dict)
@@ -17,12 +21,13 @@ import socket
 from assets.code.helperCode import *
 
 def quitGame(client:socket.socket, reason:str) -> None:
+    # Author:       Ryan Rice
     # Purpose:      Shuts the game down cleanly. Used both when the player closes the window and
     #               when the server stops answering, so the program always closes the same way
-    # Arguments:
-    # client        The socket connected to the server
-    # reason        A short message printed in the terminal saying why the game closed
-    # Returns:      Nothing. sys.exit() ends the program
+    # Pre:          client is the socket connected to the server and pygame has been started.
+    #               reason is a short message saying why the game is closing
+    # Post:         reason is printed, the socket is closed, the pygame window is closed and the
+    #               program ends. The server sees the connection close
     print(reason)
     # Closing the socket tells the server this player is gone instead of leaving it waiting
     client.close()
@@ -33,15 +38,16 @@ def quitGame(client:socket.socket, reason:str) -> None:
 # where you should add to the code are marked.  Feel free to change any part of this project
 # to suit your needs.
 def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.socket) -> None:
+    # Author:       Course template (game logic and drawing). Ryan Rice (sending and receiving
+    #               updates, sync, disconnect handling, spectator mode). Nathan Jones (Play Again)
     # Purpose:      Runs the game at 60 frames a second. Every frame it reads the keys, moves the
     #               paddles and ball, draws the screen, sends this player's update to the server
-    #               and uses the server's reply to move the opponent and stay in sync
-    # Arguments:
-    # screenWidth   Width of the game window in pixels, sent by the server
-    # screenHeight  Height of the game window in pixels, sent by the server
-    # playerPaddle  "left" or "right", the paddle this player controls, sent by the server
-    # client        The socket already connected to the server in joinServer
-    # Returns:      Nothing. The loop only ends when quitGame closes the program
+    #               and uses the server's reply to move the opponent and stay in sync. A spectator
+    #               ignores the keys and copies both paddles, the ball and the score from the server
+    # Pre:          joinServer has connected client to the server and received screenWidth and
+    #               screenHeight (pixels) and playerPaddle ("left", "right" or "spectator")
+    # Post:         Never returns normally. The loop runs until quitGame closes the socket and ends
+    #               the program, either because the window was closed or the server went away
 
     # Pygame inits
     pygame.mixer.pre_init(44100, -16, 2, 2048)
@@ -290,16 +296,15 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 # If you want to hard code the screen's dimensions into the code, that's fine, but you will need to know
 # which client is which
 def joinServer(ip:str, port:str, initials:str, username:str, password:str, errorLabel:tk.Label, app:tk.Tk) -> None:
-    # Purpose:      This method is fired when the join button is clicked
-    # Arguments:
-    # ip            A string holding the IP address of the server
-    # port          A string holding the port the server is using
-    # initials      A string holding what the player typed in the Initials box, used for the leaderboard
-    # username      The account name. A new name is registered, a known name has to match its password
-    # password      The account password. It is sent encrypted and the server only stores a hash of it
-    # errorLabel    A tk label widget, modify it's text to display messages to the user (example below)
-    # app           The tk window object, needed to kill the window
-    # Returns:      Nothing. Shows an error in errorLabel and returns early if joining fails
+    # Author:       Ryan Rice (connecting, receiving the setup, login). Nathan Jones (initials)
+    # Purpose:      Runs when the Join button is clicked. Checks what the player typed, connects to
+    #               the server, sends the initials, username and password, waits for the screen size
+    #               and paddle side, then starts the game
+    # Pre:          The start screen is open. ip, port, initials, username and password are what the
+    #               player typed. errorLabel is the label under the Join button and app is the window
+    # Post:         If joining worked, the start window is hidden and playGame runs. If anything
+    #               failed (bad input, no server, wrong password) errorLabel says why, the socket is
+    #               closed and the start screen stays open so the player can try again
 
     # Clean up the initials before connecting. strip() removes spaces, upper() makes "nj" and "NJ"
     # count as the same player, and [:3] keeps at most 3 characters
@@ -373,10 +378,12 @@ def joinServer(ip:str, port:str, initials:str, username:str, password:str, error
 
 # This displays the opening screen, you don't need to edit this (but may if you like)
 def startScreen() -> None:
-    # Purpose:      Builds the start window with the logo, the Server IP, Server Port and Initials
-    #               boxes, the Join button and the message label, then waits for the player
-    # Arguments:    None
-    # Returns:      Nothing. Clicking Join calls joinServer with what the player typed
+    # Author:       Course template. Nathan Jones (Initials box). Ryan Rice (Username and Password boxes)
+    # Purpose:      Builds the start window with the logo, the Server IP, Server Port, Initials,
+    #               Username and Password boxes, the Join button and the message label
+    # Pre:          The program was started from inside src/ so ./assets/images/logo.png can be found
+    # Post:         The window stays open until the game starts or it is closed. Clicking Join calls
+    #               joinServer with what the player typed
     app = tk.Tk()
     app.title("Server Info")
 

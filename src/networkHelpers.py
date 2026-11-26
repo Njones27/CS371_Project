@@ -1,10 +1,12 @@
 # =================================================================================================
 # Contributing Authors:	    Ryan Rice
 # Email Addresses:          rlri231@uky.edu
-# Date:                     11.06.2026
-# Purpose:                  <Network helper functions that are shared between client and server
-#                            this includes sending and receiving information>
-# Misc:                     <Not Required.  Anything else you might want to include>
+# Date:                     11.26.2026
+# Purpose:                  Network helper functions shared by the client and the server. Every message
+#                           in the game is sent and received through sendMessage and receiveMessage,
+#                           which turn dictionaries into encrypted JSON text that ends in a newline
+# Misc:                     Uses Fernet from the cryptography package with the shared key in secret.key,
+#                           so the client and the server must have the same secret.key file
 # =================================================================================================
 
 import json
@@ -24,6 +26,13 @@ cipher = Fernet(key)
 
 
 def sendMessage(sock: socket.socket, data: dict) -> None:
+    # Author:       Ryan Rice
+    # Purpose:      Sends one dictionary over the socket as encrypted JSON text ending in "\n"
+    # Pre:          sock is connected and cipher was made from secret.key when this file was imported.
+    #               data only holds values JSON can store (numbers, strings, booleans, lists, dicts)
+    # Post:         The whole encrypted message and its "\n" end marker have been sent. Raises
+    #               OSError if the connection is broken
+
     # Package data into JSON text using \n to mark end of message
     packet = json.dumps(data) #\n character that marks end of packet
     # must be added after encryption or it will be encrypted 
@@ -36,8 +45,14 @@ def sendMessage(sock: socket.socket, data: dict) -> None:
     # Send packet
     sock.sendall(packet)
 
-# Receives one message and returns it as a dict
 def receiveMessage(sock: socket.socket) -> dict:
+    # Author:       Ryan Rice
+    # Purpose:      Receives one message, decrypts it and returns it as a dictionary
+    # Pre:          sock is connected and the other side sends with sendMessage using the same secret.key
+    # Post:         Returns one complete message. Any extra bytes that arrived are saved in buffers[sock]
+    #               for the next call. Raises ConnectionError if the other side closed the connection
+    #               and ValueError if the message could not be decrypted (wrong key) or read
+
     # Start with any bytes left over from the last call
     buffer = buffers.get(sock, b"")
     # Keep reading until a complete message has arrived
