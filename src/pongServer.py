@@ -14,7 +14,10 @@ import threading
 import json
 import os
 import html
+import hashlib
+import hmac
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Optional
 
 # Use this file to write your server logic
 # You will need to support at least two clients
@@ -29,6 +32,13 @@ SCREEN_HEIGHT = 480
 
 # File the win counts are saved in, so they are still there after the server restarts
 LEADERBOARD_FILE = "leaderboard.json"
+
+# File the player accounts are saved in. It only holds a salted hash of each password, never the password
+ACCOUNTS_FILE = "accounts.json"
+# How many times the password is hashed. More rounds make guessing passwords from the file much slower
+HASH_ROUNDS = 100_000
+# Lets only one thread at a time read or write the accounts file (players and spectators can join at once)
+accountsLock = threading.Lock()
 
 # Port for the leaderboard webpage, plus a backup for when the server is not run as admin
 WEB_PORT = 80
@@ -191,6 +201,141 @@ def handleClient(conn: socket.socket, side: str) -> None:
                 pass
 
 
+def hashPassword(password: str, salt: str) -> str:
+    # Author:       Ryan Rice
+    # Purpose:      Turns a password into a hash that can be stored safely. The same password and salt
+    #               always give the same hash, but the hash cannot be turned back into the password
+    # Pre:          salt is a random hex string saved with the account when it was registered
+    # Post:         Returns the hash as a hex string. Nothing is changed
+
+    # pbkdf2_hmac runs sha256 HASH_ROUNDS times. The salt makes two players with the same password
+    # end up with different hashes
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), HASH_ROUNDS).hex()
+
+
+def checkLogin(username: str, password: str) -> str:
+    # Author:       Ryan Rice
+    # Purpose:      Registration and authentication. A username that is not in accounts.json is
+    #               registered with this password. A username that is already there has to match its
+    #               saved password
+    # Pre:          username and password are not empty
+    # Post:         Returns "" if the player may join, or a message saying why not. A new account is
+    #               saved to accounts.json
+
+    with accountsLock:
+        accounts = {}
+        if os.path.exists(ACCOUNTS_FILE):
+            with open(ACCOUNTS_FILE, "r") as f:
+                accounts = json.load(f)
+
+        # Registration: a new username gets a random salt and the hash of its password
+        if username not in accounts:
+            salt = os.urandom(16).hex()
+            accounts[username] = {"salt": salt, "hash": hashPassword(password, salt)}
+            with open(ACCOUNTS_FILE, "w") as f:
+                json.dump(accounts, f)
+            print(f"Registered a new account: {username}")
+            return ""
+
+        # Authentication: hash the password the same way and compare it with the saved hash.
+        # compare_digest takes the same time whether the hashes match early or late, so the timing
+        # does not give away how much of a guess was right
+        saved = accounts[username]
+        if hmac.compare_digest(hashPassword(password, saved["salt"]), saved["hash"]):
+            return ""
+        return f"Wrong password for {username}"
+
+
+def readHello(conn: socket.socket, addr: tuple) -> Optional[dict]:
+    # Author:       Ryan Rice
+    # Purpose:      Reads the first message from a new client, which every client sends right after
+    #               connecting. Players and spectators both go through here, so any check on who may
+    #               join (the wrong key now, and the login later) only has to be written once
+    # Pre:          conn was just returned by server.accept() and nothing has been read from it yet
+    # Post:         Returns the client's first message as a dictionary. If the client could not join
+    #               (wrong secret.key, missing initials or login, wrong password, or it hung up) it is
+    #               sent the reason when possible, conn is closed and None is returned
+
+    try:
+        hello = receiveMessage(conn)
+        # Every client has to send initials, a username and a password
+        if not hello.get("initials"):
+            raise ValueError("no initials were sent")
+        username = str(hello.get("username", "")).strip()
+        password = str(hello.get("password", ""))
+        if not username or not password:
+            raise ValueError("no username or password was sent")
+
+        # Registration and authentication
+        error = checkLogin(username, password)
+        if error:
+            print(f"Turned away a client from {addr[0]}: {error}")
+            # Tell the client why so it can show the message on the start screen
+            sendMessage(conn, {"error": error})
+            conn.close()
+            return None
+        return hello
+    # ValueError means the message could not be decrypted (wrong key), was not valid JSON or was
+    # missing something. The client may not even have our key, so nothing is sent back
+    except (ConnectionError, OSError, ValueError) as e:
+        print(f"Turned away a client from {addr[0]}, it could not join: {e}")
+        conn.close()
+        return None
+
+
+def handleSpectator(conn: socket.socket, number: int) -> None:
+    # Author:       Ryan Rice
+    # Purpose:      Runs in its own thread for one spectator. Every frame the spectator asks for the
+    #               game and gets back both players' latest updates, so it can draw both paddles, the
+    #               ball and the score. A spectator only reads gameState, it never changes the game
+    # Pre:          conn has joined through readHello and was sent the setup message with
+    #               "playerPaddle": "spectator"
+    # Post:         Ends when the spectator leaves or the server closes. conn is closed and the game
+    #               is not affected
+
+    try:
+        while True:
+            # The spectator sends {"spectator": True} every frame. Its content is not needed, it keeps
+            # the same send then receive rhythm the players use, so one reply goes back per message
+            receiveMessage(conn)
+            # Copy both players' newest updates while holding the lock, the same way handleClient does
+            with stateLock:
+                reply = {"left": gameState["left"], "right": gameState["right"]}
+            sendMessage(conn, reply)
+    except (ConnectionError, OSError, ValueError) as e:
+        print(f"Spectator {number} left: {e}")
+    finally:
+        conn.close()
+
+
+def acceptSpectators() -> None:
+    # Author:       Ryan Rice
+    # Purpose:      Keeps accepting new clients after both players have joined. Every extra client
+    #               becomes a spectator with its own thread, so any number of clients can be connected
+    # Pre:          Both players have joined and their game threads are running
+    # Post:         Runs until the server exits. Each spectator that joins is sent the screen size with
+    #               "playerPaddle": "spectator" and gets a handleSpectator thread
+
+    number = 0
+    while True:
+        conn, addr = server.accept()
+        hello = readHello(conn, addr)
+        # readHello already closed a client that could not join, so just wait for the next one
+        if hello is None:
+            continue
+        number += 1
+        print(f"Spectator {number} ({hello['initials']}) connected from {addr[0]}")
+        try:
+            # Same setup message the players get. "spectator" tells the client not to control a paddle
+            sendMessage(conn, {"screenWidth": SCREEN_WIDTH, "screenHeight": SCREEN_HEIGHT,
+                               "playerPaddle": "spectator"})
+        except OSError:
+            conn.close()
+            continue
+        # daemon=True so spectators never keep the server open after the game is over
+        threading.Thread(target=handleSpectator, args=(conn, number), daemon=True).start()
+
+
 class LeaderboardHandler(BaseHTTPRequestHandler):
     # Purpose:      Answers web browser requests with the leaderboard page
 
@@ -251,12 +396,16 @@ startLeaderboard()
 # Accept exactly two clients. The first to connect is the left paddle and the second is the right
 clients = []
 for side in ["left", "right"]:
-    # Waits until a client connects, then gives back a socket just for that client
-    conn, addr = server.accept()
+    # Keep accepting until a client joins properly. A client with the wrong secret.key (or one that
+    # hangs up right away) is turned away, and the server waits for someone else to take this side
+    while True:
+        # Waits until a client connects, then gives back a socket just for that client
+        conn, addr = server.accept()
+        # The first message from the client holds its initials for the leaderboard
+        hello = readHello(conn, addr)
+        if hello is not None:
+            break
     print(f"The {side} player connected from {addr[0]}")
-
-    # The first message from the client is its initials for the leaderboard
-    hello = receiveMessage(conn)
     initials[side] = hello["initials"]
 
     # Remember this client until both players have joined
@@ -274,6 +423,9 @@ for conn, side in clients:
     t = threading.Thread(target=handleClient, args=(conn, side), daemon=True)
     t.start()
     threads.append(t)
+
+# The game has started, so every client that connects from now on is a spectator
+threading.Thread(target=acceptSpectators, daemon=True).start()
 
 # Keep the main program open until both client threads have finished
 for t in threads:

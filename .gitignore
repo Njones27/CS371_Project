@@ -1,4 +1,6 @@
 # Saved win counts from test games
 leaderboard.json
+# Player accounts (salted password hashes) made while testing
+accounts.json
 # Python cache folders
 __pycache__/

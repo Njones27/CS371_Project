@@ -80,6 +80,13 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         opponentPaddleObj = leftPaddle
         playerPaddleObj = rightPaddle
 
+    # Spectator mode. Every client after the two players is told "spectator" by the server. A
+    # spectator ignores the keyboard and copies both paddles, the ball and the score from the server.
+    # It still lands in the else branch above, but its "player" paddle is never moved by the keys
+    spectator = playerPaddle == "spectator"
+    # Small label drawn at the bottom of a spectator's window
+    spectatorSurface = pygame.font.Font("./assets/fonts/visitor.ttf", 20).render("Spectating", False, WHITE)
+
     lScore = 0
     rScore = 0
 
@@ -100,7 +107,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 quitGame(client, "You closed the game")
-            elif event.type == pygame.KEYDOWN:
+            # "and not spectator" means a spectator's keys do nothing, so it can only watch
+            elif event.type == pygame.KEYDOWN and not spectator:
                 if event.key == pygame.K_DOWN:
                     playerPaddleObj.moving = "down"
 
@@ -111,7 +119,7 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
                 elif event.key == pygame.K_SPACE and (lScore > 4 or rScore > 4):
                     playAgain = True
 
-            elif event.type == pygame.KEYUP:
+            elif event.type == pygame.KEYUP and not spectator:
                 playerPaddleObj.moving = ""
 
         # =========================================================================================
@@ -142,6 +150,9 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
             # Under the win message, tell the player how to ask for a rematch. Once they have
             # pressed space the text changes so they know it worked
             againText = "Waiting for opponent" if playAgain else "Space to play again"
+            # A spectator cannot vote for a rematch, so it is only told what is happening
+            if spectator:
+                againText = "Waiting for the players"
             againSurface = winFont.render(againText, False, WHITE, (0,0,0))
             screen.blit(againSurface, againSurface.get_rect(center=(screenWidth/2, screenHeight/2 + 50)))
         else:
@@ -186,6 +197,8 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         pygame.draw.rect(screen, WHITE, topWall)
         pygame.draw.rect(screen, WHITE, bottomWall)
         scoreRect = updateScore(lScore, rScore, screen, WHITE, scoreFont)
+        if spectator:
+            screen.blit(spectatorSurface, spectatorSurface.get_rect(center=(screenWidth/2, screenHeight - 30)))
         pygame.display.update()
         clock.tick(60)
         
@@ -214,13 +227,38 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
         # returning. ConnectionError comes from receiveMessage when the server hangs up, OSError covers
         # other network errors (like a reset connection) and ValueError covers a half sent message
         try:
-            sendMessage(client,update)
+            if spectator:
+                # A spectator has nothing to report, it only asks for the current game
+                sendMessage(client, {"spectator": True})
+            else:
+                sendMessage(client,update)
             # recieve opponents data
             reply = receiveMessage(client)
         except (ConnectionError, OSError, ValueError) as e:
             quitGame(client, f"Lost connection to the server, closing the game: {e}")
+
+        if spectator:
+            # The reply is {"left": <left player's update>, "right": <right player's update>}. Either can
+            # be None if that player has not sent an update yet (the start of a game or a rematch)
+            players = [reply.get("left"), reply.get("right")]
+            for state, paddle in zip(players, [leftPaddle, rightPaddle]):
+                if state:
+                    paddle.rect.y = state["paddleY"]
+                    paddle.moving = state["moving"]
+            sent = [state for state in players if state]
+            if sent:
+                # Same idea as Client Step 11: the player with the bigger sync number is furthest
+                # along, so the spectator copies their ball and score
+                ahead = max(sent, key=lambda state: state["sync"])
+                ball.rect.x = ahead["ballX"]
+                ball.rect.y = ahead["ballY"]
+                ball.xVel = ahead["ballXVel"]
+                ball.yVel = ahead["ballYVel"]
+                lScore = ahead["lScore"]
+                rScore = ahead["rScore"]
+                sync = ahead["sync"]
         # update opponenet paddle object if reply was received
-        if "paddleY" in reply:
+        elif "paddleY" in reply:
             opponentPaddleObj.rect.y = reply["paddleY"]
             opponentPaddleObj.moving = reply["moving"]
             # if opponent is ahead use their information to update game data
@@ -251,12 +289,14 @@ def playGame(screenWidth:int, screenHeight:int, playerPaddle:str, client:socket.
 # the screen width, height and player paddle (either "left" or "right")
 # If you want to hard code the screen's dimensions into the code, that's fine, but you will need to know
 # which client is which
-def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -> None:
+def joinServer(ip:str, port:str, initials:str, username:str, password:str, errorLabel:tk.Label, app:tk.Tk) -> None:
     # Purpose:      This method is fired when the join button is clicked
     # Arguments:
     # ip            A string holding the IP address of the server
     # port          A string holding the port the server is using
     # initials      A string holding what the player typed in the Initials box, used for the leaderboard
+    # username      The account name. A new name is registered, a known name has to match its password
+    # password      The account password. It is sent encrypted and the server only stores a hash of it
     # errorLabel    A tk label widget, modify it's text to display messages to the user (example below)
     # app           The tk window object, needed to kill the window
     # Returns:      Nothing. Shows an error in errorLabel and returns early if joining fails
@@ -267,6 +307,13 @@ def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -
     # isalnum() is False for an empty box or symbols, so the player cannot join without real initials
     if not initials.isalnum():
         errorLabel.config(text="Enter 1 to 3 letters or numbers for your initials")
+        errorLabel.update()
+        return
+
+    # Registration and login. Both boxes have to be filled in before the player can join
+    username = username.strip()
+    if not username or not password:
+        errorLabel.config(text="Enter a username and a password")
         errorLabel.update()
         return
 
@@ -285,9 +332,10 @@ def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -
     errorLabel.config(text="Connected, wating for another player...")
     errorLabel.update()
 
-    # Tell the server who this player is so wins can be saved under these initials. The server
-    # reads this first, and once both players have joined it sends back the screen size and paddle side
-    sendMessage(client, {"initials": initials})
+    # Tell the server who this player is so wins can be saved under these initials, along with the
+    # username and password for the login. The server reads this first. A wrong password is answered
+    # right away with an error, otherwise the screen size and paddle side come once both players joined
+    sendMessage(client, {"initials": initials, "username": username, "password": password})
 
     # Get the required information from your server (screen width, height & player paddle, "left or "right)
     #receive message function -- send message function must be implemented server side to send message,
@@ -296,6 +344,13 @@ def joinServer(ip:str, port:str, initials:str, errorLabel:tk.Label, app:tk.Tk) -
         data = receiveMessage(client)
     except(OSError,ValueError) as e:
         errorLabel.config(text=f"Could not receive data: {e}")
+        errorLabel.update()
+        client.close()
+        return
+    # The server turned this player away, for example because of a wrong password. Show why and stay
+    # on the start screen so the player can fix it and click Join again
+    if "error" in data:
+        errorLabel.config(text=data["error"])
         errorLabel.update()
         client.close()
         return
@@ -349,12 +404,26 @@ def startScreen() -> None:
     initialsEntry = tk.Entry(app)
     initialsEntry.grid(column=1, row=3)
 
-    # The error label and Join button each moved down one row to make room for the initials box
-    errorLabel = tk.Label(text="")
-    errorLabel.grid(column=0, row=5, columnspan=2)
+    # Username and password boxes for registration and login. show="*" hides the password as it is typed
+    usernameLabel = tk.Label(text="Username:")
+    usernameLabel.grid(column=0, row=4, sticky="W", padx=8)
 
-    joinButton = tk.Button(text="Join", command=lambda: joinServer(ipEntry.get(), portEntry.get(), initialsEntry.get(), errorLabel, app))
-    joinButton.grid(column=0, row=4, columnspan=2)
+    usernameEntry = tk.Entry(app)
+    usernameEntry.grid(column=1, row=4)
+
+    passwordLabel = tk.Label(text="Password:")
+    passwordLabel.grid(column=0, row=5, sticky="W", padx=8)
+
+    passwordEntry = tk.Entry(app, show="*")
+    passwordEntry.grid(column=1, row=5)
+
+    # The Join button and error label sit under all the boxes
+    errorLabel = tk.Label(text="")
+    errorLabel.grid(column=0, row=7, columnspan=2)
+
+    joinButton = tk.Button(text="Join", command=lambda: joinServer(ipEntry.get(), portEntry.get(), initialsEntry.get(),
+                                                                   usernameEntry.get(), passwordEntry.get(), errorLabel, app))
+    joinButton.grid(column=0, row=6, columnspan=2)
 
     app.mainloop()
 
