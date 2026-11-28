@@ -4,3 +4,4 @@ leaderboard.json
 accounts.json
 # Python cache folders
 __pycache__/
+venv/

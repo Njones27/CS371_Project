@@ -1,6 +1,6 @@
 # =================================================================================================
 # Contributing Authors:	    Ryan Rice, Nathan Jones
-# Email Addresses:          rlri231@uky.edu
+# Email Addresses:          rlri231@uky.edu, njjo227@uky.edu
 # Date:                     11.26.2026
 # Purpose:                  The client side of the game. The start screen collects the server address,
 #                           initials, username and password, then the game loop sends this player's

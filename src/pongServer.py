@@ -1,9 +1,13 @@
 # =================================================================================================
-# Contributing Authors:	    Lucas Anderson
-# Email Addresses:          lfan224@uky.edu
-# Date:                     11-4-26
-# Purpose:                  <How this file contributes to the project>
-# Misc:                     <Not Required.  Anything else you might want to include>
+# Contributing Authors:	    Lucas Anderson, Nathan Jones, Ryan Rice
+# Email Addresses:          lfan224@uky.edu, njjo227@uky.edu, rlri231@uky.edu
+# Date:                     11.28.2026
+# Purpose:                  The server side of the game. It accepts two players (and any number of
+#                           spectators after them), checks each client's login, and every frame passes
+#                           each player's paddle, ball, score and sync to the other player. It also saves
+#                           wins to leaderboard.json and shows them on a webpage on port 80
+# Misc:                     Every message goes through networkHelpers.py, so it is encrypted. Run with
+#                           sudo on Mac or Linux so the leaderboard can use port 80, otherwise it uses 8080
 # =================================================================================================
 
 # sendMessage(socket.socket,data: dict)
@@ -62,9 +66,12 @@ connections = {"left": None, "right": None}
 
 
 def loadWins() -> dict:
+    # Author:       Nathan Jones
     # Purpose:      Reads the saved win counts from the leaderboard file
-    # Arguments:    None
-    # Returns:      A dictionary of initials to wins, for example {"NJ": 3, "RR": 2}
+    # Pre:          The server was started from the folder leaderboard.json is kept in. The file may
+    #               not exist yet if nobody has won a game
+    # Post:         Returns a dictionary of initials to wins, for example {"NJ": 3, "RR": 2}, or {} if
+    #               there is no file yet. Nothing is changed
 
     # No file yet means nobody has won a game
     if not os.path.exists(LEADERBOARD_FILE):
@@ -73,12 +80,13 @@ def loadWins() -> dict:
         return json.load(f)
 
 def synchronizeGames(update: dict, opponentUpdate: dict) -> dict:
+    # Author:       Lucas Anderson (Ryan Rice fixed the reply so paddleY and sync are kept)
     # Purpose:      Compares the two players' game states and builds the reply for this player
-    # Arguments:
-    # update            The current client's game state
-    # opponentUpdate    The opponent's most recent game state, or None if there is not one yet
-    # Returns:      {"waiting": True} if the opponent has not sent anything yet, otherwise a copy of
-    #               the opponent's state, plus "syncDifference" if the two games are more than 2 frames apart
+    # Pre:          update is this client's newest update. opponentUpdate is the opponent's newest
+    #               update, or None if the opponent has not sent one yet. Called while holding stateLock
+    # Post:         Returns {"waiting": True} if the opponent has not sent anything yet, otherwise a copy
+    #               of the opponent's update, plus "syncDifference" if the games are more than 2 frames
+    #               apart. Neither update is changed
 
     if opponentUpdate is None:
         return {"waiting": True}
@@ -95,10 +103,12 @@ def synchronizeGames(update: dict, opponentUpdate: dict) -> dict:
 
 
 def recordWin(playerInitials: str) -> None:
+    # Author:       Nathan Jones
     # Purpose:      Adds one win for a player and saves the leaderboard file
-    # Arguments:
-    # playerInitials    The initials of the player who won the game
-    # Returns:      Nothing. The new count is saved in leaderboard.json
+    # Pre:          playerInitials are the initials the winning player typed in. Called while holding
+    #               stateLock so two threads never write the file at once
+    # Post:         leaderboard.json holds one more win for playerInitials (starting from 0 for a new
+    #               player)
 
     wins = loadWins()
     # A player who has never won before starts at 0
@@ -108,13 +118,14 @@ def recordWin(playerInitials: str) -> None:
 
 
 def findWinner(update: dict, opponentUpdate: dict) -> str:
+    # Author:       Nathan Jones
     # Purpose:      Works out if the game is over, using the same "more than 4" rule as the win
     #               message in pongClient.py. Both players' games have to agree before it counts,
     #               because the two games can be a frame or two apart
-    # Arguments:
-    # update            The newest update from one player
-    # opponentUpdate    The newest update from the other player, or None if there is not one yet
-    # Returns:      "left" or "right" for the winning side, or "" if nobody has won yet
+    # Pre:          update is the newest update from one player. opponentUpdate is the newest update
+    #               from the other player, or None if there is not one yet
+    # Post:         Returns "left" or "right" for the winning side, or "" if nobody has won yet.
+    #               Nothing is changed
 
     if opponentUpdate is None:
         return ""
@@ -126,12 +137,13 @@ def findWinner(update: dict, opponentUpdate: dict) -> str:
 
 
 def handleClient(conn: socket.socket, side: str) -> None:
+    # Author:       Nathan Jones (game loop and Play Again). Ryan Rice (disconnect handling)
     # Purpose:      Runs in its own thread for one client. Every frame it receives that client's
     #               update, saves it, and sends back the other player's latest update
-    # Arguments:
-    # conn          The socket for this one client, returned by server.accept()
-    # side          "left" or "right", the paddle this client controls
-    # Returns:      Nothing. Ends when either player disconnects, after closing both players' sockets
+    # Pre:          conn is a player that joined through readHello and was sent the setup message.
+    #               side is "left" or "right", the paddle this client controls
+    # Post:         Ends when either player disconnects. conn is closed and the other player's socket
+    #               is shut down so their game closes too
     global winRecorded
 
     # The other player's key in gameState
@@ -337,12 +349,15 @@ def acceptSpectators() -> None:
 
 
 class LeaderboardHandler(BaseHTTPRequestHandler):
+    # Author:       Nathan Jones
     # Purpose:      Answers web browser requests with the leaderboard page
 
     def do_GET(self) -> None:
+        # Author:       Nathan Jones
         # Purpose:      Runs every time a browser asks for a page. Any path shows the leaderboard
-        # Arguments:    None besides self. The request details are stored on self by BaseHTTPRequestHandler
-        # Returns:      Nothing. The page is written to the browser with self.wfile.write
+        # Pre:          A browser connected to the leaderboard port. The request details are stored on
+        #               self by BaseHTTPRequestHandler
+        # Post:         The browser was sent a page listing every player's wins, most wins first
 
         # Read the saved wins inside the lock so a game thread is never writing the file at the same time
         with stateLock:
@@ -364,9 +379,11 @@ class LeaderboardHandler(BaseHTTPRequestHandler):
 
 
 def startLeaderboard() -> None:
+    # Author:       Nathan Jones
     # Purpose:      Starts the leaderboard webpage in its own thread so it runs next to the game
-    # Arguments:    None
-    # Returns:      Nothing. Prints which port the page is on, or that it is off for this run
+    # Pre:          Called once, before any players join
+    # Post:         The page is running on port 80, or 8080 if 80 could not be opened, and the port is
+    #               printed. If neither port works it prints that the page is off and the game still runs
 
     # Port 80 needs admin rights, so try the backup port if it cannot be opened
     for port in [WEB_PORT, BACKUP_WEB_PORT]:
